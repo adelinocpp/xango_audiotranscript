@@ -12,6 +12,9 @@
 /sslcert
 /src/sslcert
 
+# python cache
+/src/transcript/utils/__pycache__
+
 # production
 /build
 
