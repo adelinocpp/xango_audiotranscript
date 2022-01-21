@@ -1,8 +1,8 @@
 require("dotenv").config();
-import {tokenInfoInterface, tokenReturnInterface, CheckToken,
+import {CheckToken,
         GenerateToken,
         FitData} from "../Cryptography/Authentication";
-import { pgInterfaceUser } from "./User";
+import { pgInterfaceUser, tokenInfoInterface, tokenReturnInterface } from "./User";
 
 export default class ResponseJSON {
     version: string;
@@ -57,7 +57,7 @@ export default class ResponseJSON {
         this.databaseUp = true;
     };
     // ----------------------------------------------------------------------------
-    async processAccessToken(token:string){
+    async processAccessToken(token:string,time:number = (<number>(process.env.TOKEN_VALIDITY == undefined? 24: <unknown>process.env.TOKEN_VALIDITY))*60*60){
         var tokenInfo:tokenInfoInterface = {id: -1, exp: "", validy: false};
         token = FitData(token);
         if (( token === undefined) || (token.length < 136)){
@@ -70,12 +70,12 @@ export default class ResponseJSON {
             let tokenRenevalTime = (<number>((process.env.TOKEN_RENEVAL_TIME === undefined) ? 1 : <unknown>process.env.TOKEN_RENEVAL_TIME))
             if (tokenInfo.validy && 
                 ((date_exp.getTime() - date_now.getTime())/(3600*1000) <  tokenRenevalTime) ){
-                    token = GenerateToken(tokenInfo.id.toString());
+                    token = GenerateToken(tokenInfo.id.toString(),time);
                     tokenInfo = await CheckToken(token);
                     this.requestSucess = true;
             }
             this.databaseIsUp()
-        } catch(err) {
+        } catch(err:any) {
             console.log("ERROR em processAccessToken() (token verify) em ResponseJSON: ", err.stack.split("at")[0]);
             throw err;
         } finally {

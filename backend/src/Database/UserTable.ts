@@ -1,10 +1,9 @@
 //require("dotenv").config();
 import { Pool } from "pg";
 import {pgInterfaceUser} from "../Models/User";
-import {EncriptString, DencriptString} from "../Cryptography/CryptoString";
+import {encriptString, dencriptString} from "../Cryptography/CryptoString";
 import {connectionStringWebUser}  from "./General";
-import {tokenInfoInterface, CheckToken, EncriptPassWord} from "../Cryptography/Authentication";
-import {pgInterfaceExtraEmail} from "../Models/ExtraEmail";
+// import {tokenInfoInterface, CheckToken, EncriptPassWord} from "../Cryptography/Authentication";
 import fs from "fs";
 // ----------------------------------------------------------------------------
 
@@ -19,50 +18,116 @@ import fs from "fs";
 //
 //  CheckUserPW: Verificar se a senha do usuário é autentica
 //  
-//  AddUserOnDatabase: Adicionar usuário na tabela
-//  
-//  RemUserOfDataBase: Remove usuário da base de dados e todos registros associados
-//
-//  VerifyUser: Torna o usuário verificado
-//
-//  UnverifyUser: Remove a verificação do usuário
-//
-//  CheckUserVerify: Checa se o usuário é verificado
-//
-//  UpdatePasswordById: Autualiza a senha do usuário pela ID
-//
-//  SetUserNeedPasswordUpdate: Indica que usuário foi bloqueado e precisa atualizar senha
+//  QS = `UPDATE alert SET new = false, viewed = to_timestamp(${Date.now()} / 1000.0), completed = to_timestamp(${Date.now()} / 1000.0) WHERE (id = $1 AND user_id = $2);`
 //
 // ============================================================================
 
 // ----------------------------------------------------------------------------
-async function CheckUserOnDataBase(FieldValue:string):Promise<string>{
+function DecimalToBase(valor:number, base:number, nDig:number, remRep:boolean):number[]{
+    var pot:number[] = [];    
+    for(let i = 0; i < nDig; i++){
+        pot = [...pot,0];
+    }
+    var dividendo:number;
+    if (remRep) {
+        let Snum = (base**(nDig) - 1)/(base - 1);
+        let k = Math.trunc(valor/Snum);
+        dividendo = valor + k + 1;
+    } else{
+        dividendo = valor;
+    }
+    for(let i = 0; i < pot.length; i++){
+        if (Math.trunc(dividendo/base) > 0) {
+            pot[i] = dividendo % base;
+            dividendo = Math.trunc(dividendo/base);
+        } else {
+            pot[i] = dividendo;
+            break;
+        }
+    }
+    return pot;
+}
+// ----------------------------------------------------------------------------
+function ClearAccessKey(access_key:string):string{
+  return access_key.replace(/[^A-Za-z0-9@#$&*+?]/g,'');
+}
+// ----------------------------------------------------------------------------
+async function GenerateAccessKeyById(id:string,numChars:number = 4,remSameChar:boolean = true):Promise<string>{
+  const pool = new Pool({ connectionString: connectionStringWebUser });
+  var seq:string[] = ['A','B','C','D','E','F','G','H','I','J', 
+          'K','L','M','N','O','P','Q','R','S','T',
+          'U','V','W','X','Y','Z','0','1','2','3',
+          '4','5','6','7','8','9','@','#','$','&',
+          '*','+','?'];
+  var invStr:string = '';
+  var Key_Exist:boolean = true;
+  try{
+    while (Key_Exist){
+      var seed = Math.floor((Math.random() * 10**11) + Number(id)*(1 - Math.random())*((Math.random() * 10**12) + 1));
+      // console.log("GenerateAccessKeyById 0:",seed,seq.length,numChars,remSameChar);
+      var potConv:number[] = DecimalToBase(seed,seq.length,numChars,remSameChar);
+      // console.log("GenerateAccessKeyById 1:",potConv);
+      for (let j = 0; j < potConv.length; j++)
+        invStr = seq[potConv[j]] + invStr;
+      let res = await pool.query("SELECT * FROM access_keys WHERE access_key = $1;",[invStr]); 
+      Key_Exist = (res.rowCount > 0);
+      // console.log("GenerateAccessKeyById 2:",invStr,printConvite(invStr),Key_Exist);
+    }
+  } catch(e:any){
+    console.log("ERROR from GenerateAccessKeyById() in UserTable: ", e.stack.split("at")[0]);
+  }finally{
+    return invStr;
+  }
+}
+// ----------------------------------------------------------------------------
+function printConvite(potConv:string,useDiv:boolean = true, nDiv:number = 4, charDiv:string = '-'):string{
+    var invStr:string = '';
+    for (let j = 0; j < potConv.length; j++){
+        if ((j > 0) && ((j % nDiv) == 0) && useDiv)
+            invStr = invStr + charDiv;
+        invStr = invStr + potConv[j];
+        // invStr = potConv[j] + invStr;
+    }
+    return invStr;
+}
+// ----------------------------------------------------------------------------
+async function CheckUserOnDataBaseByKey(AccessKey:string):Promise<string>{
     // DONE: função enxuta versão 0.0.0
     const pool = new Pool({ connectionString: connectionStringWebUser });
     var resultID = "-1";
     try {
-        var result = await pool.query("SELECT * FROM access_keys WHERE (access_key = $1 AND active_record = TRUE)",[FieldValue]);
-        for(let i = 0; i < result.rowCount ; i++)
+      var result = await pool.query("SELECT * FROM access_keys WHERE active_record = TRUE;");
+      for(let i = 0; i < result.rowCount ; i++)
+        if (AccessKey === dencriptString(result.rows[i].access_key,result.rows[i].id)){
             resultID = result.rows[i].id;
-        pool.end();
-    } catch(e) {
-        console.log("ERROR from CheckUserOnDataBase() in UserTable: ", e); // 30
+            // console.log("Check:",result.rows[i].access_key,result.rows[i].id)
+            break;
+        }
+      pool.end();
+    } catch(e:any) {
+        console.log("ERROR from CheckUserOnDataBase() in UserTable: ", e.stack.split("at")[0]);
     } finally {
         return resultID;
     } 
 };
 // ----------------------------------------------------------------------------
-async function CheckEmailOnDataBase(FieldValue:string):Promise<string>{
+async function CheckEmailOnDataBase(EmailValue:string):Promise<string>{
     // DONE: função enxuta versão 0.0.0
     const pool = new Pool({ connectionString: connectionStringWebUser });
     var resultID = "-1";
     try {
-        var result = await pool.query("SELECT * FROM access_keys WHERE (email = $1 AND active_record = TRUE)",[FieldValue]);
-        for(let i = 0; i < result.rowCount ; i++)
-            resultID = result.rows[i].id;
+        var result = await pool.query("SELECT * FROM access_keys WHERE (active_record = TRUE)");
+        for(let i = 0; i < result.rowCount ; i++){
+            let emailResult = dencriptString(result.rows[i].email,result.rows[i].id);
+            // console.log("check email:",emailResult,result.rows[i].id)
+            if (emailResult === EmailValue){
+                resultID = result.rows[i].id;
+                break;
+            }
+        }
         pool.end();
-    } catch(e) {
-        console.log("ERROR from CheckUserOnDataBase() in UserTable: ", e); // 30
+    } catch(e:any) {
+        console.log("ERROR from CheckEmailOnDataBase() in UserTable: ", e.stack.split("at")[0]);
     } finally {
         return resultID;
     } 
@@ -75,24 +140,22 @@ async function GetUserById(id:string):Promise<pgInterfaceUser>{
         id: -1, 
         }
     try {
-        var queryString: string = "SELECT * FROM users WHERE id = $1"
+        var queryString: string = "SELECT * FROM access_keys WHERE ((id = $1) AND (active_record = TRUE))"
         let result = await pool.query(queryString, [id]);
         pool.end();
-        if (result.rowCount > 0)
-        {
+        if (result.rowCount > 0){
             userReturn.id       = Number(id);
-            userReturn.user_name = result.rows[0].user_name;
-            userReturn.email    = result.rows[0].email;
+            userReturn.user_name = dencriptString(result.rows[0].user_name,id);
+            userReturn.email     = dencriptString(result.rows[0].email,id);
             userReturn.created  = result.rows[0].created;
             userReturn.updated  = result.rows[0].updated;
             userReturn.completed    = result.rows[0].completed;
-            
             return userReturn;
         }
         else
             return userReturn;
     } catch(e) {
-        console.log("ERROR from GetUserDataById() in UserTable: ",e); // 30
+        console.log("ERROR from GetUserById() in UserTable: ",e); // 30
         return userReturn;
     }    
 };
@@ -103,20 +166,20 @@ async function GetUserID(FieldValue:string):Promise<string>{
     const pool = new Pool({ connectionString: connectionStringWebUser });
     var numerId:string = "";
     try {
-        var queryString: string = "SELECT * FROM users"
+        var queryString: string = "SELECT * FROM access_keys"
         let result = await pool.query(queryString);
         pool.end();
         for(let i = 0; i < result.rowCount ; i++){
             let tableRow = result.rows[i];
             let tempId = tableRow.id;
-            let username = DencriptString(<string>tableRow.username,tempId);
-            let email = DencriptString(<string>tableRow.email,tempId);
+            let username = dencriptString(<string>tableRow.username,tempId);
+            let email = dencriptString(<string>tableRow.email,tempId);
             if ((username.toString().trim() === FieldValue) || (email.toString().trim() === FieldValue)) {
                 returnValue = tempId;
                 break;
             }
         }
-    } catch(e) {
+    } catch(e:any) {
         console.log("ERROR from GetUserID() in UserTable: ", e.stack.split("at")[0]);
     } finally{
         return returnValue;
@@ -125,247 +188,98 @@ async function GetUserID(FieldValue:string):Promise<string>{
 // ----------------------------------------------------------------------------
 async function GetUserEmailById(id: string):Promise<string>{
     // DONE: função enxuta versão 0.0.0
+    var returnValue:string = "";
     const pool = new Pool({ connectionString: connectionStringWebUser });
     try {
-        var queryString: string = "SELECT * FROM users WHERE id = $1"
+        var queryString: string = "SELECT * FROM access_keys WHERE (id = $1 AND active_record = TRUE);"
         let result = await pool.query(queryString, [id]);
         pool.end();
-        // console.log("result.rows[0]",result.rows[0])
-        if (result.rowCount > 0)
-            return DencriptString(<string>result.rows[0].email,id);
-        else
-            return "";
+        returnValue = dencriptString(result.rows[0].email as string,id);
     } catch(e) {
         console.log("ERROR from GetUserEmailById() in UserTable: ",e);
-        return "";
+    }finally{
+        return returnValue; 
+    }
+}
+// ----------------------------------------------------------------------------
+// async function GetUserUserNameById(id: string):Promise<string>{
+//     // DONE: função enxuta versão 0.0.0
+//     var returnValue:string = "";
+//     const pool = new Pool({ connectionString: connectionStringWebUser });
+//     try {
+//         var queryString: string = "SELECT * FROM access_keys WHERE (id = $1 AND active_record = TRUE);"
+//         let result = await pool.query(queryString, [id]);
+//         pool.end();
+//         returnValue = result.rows[0].user_name as string;
+//     } catch(e) {
+//         console.log("ERROR from GetUserUserNameById() in UserTable: ",e);
+//     }finally{
+//         return returnValue; 
+//     }   
+// }
+// ----------------------------------------------------------------------------
+async function GetAccessKeyById(id: string):Promise<string>{
+    // DONE: função enxuta versão 0.0.0
+    var returnValue:string = "";
+    const pool = new Pool({ connectionString: connectionStringWebUser });
+    try {
+        var queryString: string = "SELECT * FROM access_keys WHERE (id = $1  AND active_record = TRUE);"
+        let result = await pool.query(queryString, [id]);
+        pool.end();
+        returnValue = dencriptString(result.rows[0].access_key as string, id);
+    } catch(e) {
+        console.log("ERROR from GetAccessKeyById() in UserTable: ",e);
+    }finally{
+        return returnValue; 
     }    
 }
 // ----------------------------------------------------------------------------
-async function GetUserUserNameById(id: string):Promise<string>{
-    // DONE: função enxuta versão 0.0.0
-    const pool = new Pool({ connectionString: connectionStringWebUser });
-    try {
-        var queryString: string = "SELECT * FROM users WHERE id = $1"
-        let result = await pool.query(queryString, [id]);
-        pool.end();
-        if (result.rowCount > 0)
-            return DencriptString(<string>result.rows[0].username,id);
-        else
-            return "Conta de usuário encerrada.";
-    } catch(e) {
-        console.log("ERROR from GetUserUserNameById() in UserTable: ",e);
-        return "";
-    }    
-}
-// ----------------------------------------------------------------------------
-async function CheckUserPW(id: string, FieldValue:string):Promise<boolean>{
-    // DONE: função enxuta versão 0.0.0
-    const pool = new Pool({ connectionString: connectionStringWebUser });
-    try {
-        var queryString: string = "SELECT * FROM users WHERE id = $1"
-        let result = await pool.query(queryString, [id]);
-        pool.end();
-        //console.log("PW:",result.rows[0].userpw.toString().trim());
-        return (result.rows[0].userpw.toString().trim() === FieldValue);
-    } catch(e) {
-        console.log("ERROR from CheckUserPW() in UserTable: ",e);
-        return false;
-    }    
-};
-// ----------------------------------------------------------------------------
-async function CheckUserNeedPwUpdate(id: string):Promise<boolean>{
-    // DONE: função enxuta versão 0.0.0
-    const pool = new Pool({ connectionString: connectionStringWebUser });
-    try {
-        var queryString: string = "SELECT * FROM users WHERE id = $1"
-        let result = await pool.query(queryString, [id]);
-        pool.end();
-        return (result.rows[0].pwneedupdate);
-    } catch(e) {
-        console.log("ERROR from CheckUserNeedPwUpdate() in UserTable: ",e);
-        return false;
-    }    
-};
-// ----------------------------------------------------------------------------
-async function EncriptUser(userId: string):Promise<boolean>{
-    // DONE: função enxuta versão 0.0.0
-    var QS: string = 'SELECT * FROM users WHERE id = $1';
+async function EncriptUser(userInterface: pgInterfaceUser):Promise<boolean>{
+    // TODO: alterar argumento de entrada para interface e criptografar username e email
+    var queryString: string = "UPDATE access_keys SET access_key = $1, email = $3, user_name = $4 WHERE id = $2;"
     var returnValue: boolean = false;
-    try{
-        const pool = new Pool({ connectionString: connectionStringWebUser });
-        let result = await pool.query(QS, [userId]);
-        if (result.rowCount ==1){
-            var encUserName = EncriptString(<string>result.rows[0].username,userId);
-            var encEmail = EncriptString(<string>result.rows[0].email,userId);
-            const client = await pool.connect();
-            try {
-                await client.query('BEGIN');
-                var queryString: string = "UPDATE users SET username = $1, email = $2 WHERE id = $3;"
-                const res = await client.query(queryString, [encUserName,encEmail,userId]);
-                await client.query('COMMIT');
-            } catch (e) {
-                await client.query('ROLLBACK');
-                console.log("ERROR atomic encript of EncriptUser() in UserTable: ",e); // 30
-                throw e;
-            } finally {
-                client.release();
-            }
-            returnValue  = true;
-        }
-        pool.end();
-    } catch(e) {
-        console.log("ERROR from EncriptUser() in UserTable: ",e); // 30
-    } finally{
-        return returnValue;
-    }   
-}
-// ----------------------------------------------------------------------------
-async function CheckPasswordAreadyUpdated(token: string):Promise<boolean>{
-    var tokenData: tokenInfoInterface = await CheckToken(token, false, true);
+                
+    userInterface.email = encriptString(userInterface.email,userInterface.id.toString());
+    userInterface.user_name = encriptString(userInterface.user_name,userInterface.id.toString());
     const pool = new Pool({ connectionString: connectionStringWebUser });
+    const client = await pool.connect();
     try {
-        var queryString: string = "SELECT * FROM users WHERE id = $1"
-        let result = await pool.query(queryString, [tokenData.id]);
-        pool.end();
-        return (result.rows[0].updated > new Date(Number(tokenData.iat) * 1000));
-    } catch(e) {
-        console.log("ERROR from CheckPasswordAreadyUpdated() in UserTable: ",e);
-        return false;
-    }    
+        userInterface.access_key = encriptString(
+                    await GenerateAccessKeyById(userInterface.id.toString(),Number(process.env.ACCESS_KEY_SIZE))
+                    ,userInterface.id.toString());
+        if (userInterface.access_key === '')
+          return false;
+        await client.query('BEGIN');
+        const res = await client.query(queryString, [userInterface.access_key,
+                    userInterface.id, userInterface.email,userInterface.user_name]);
+        await client.query('COMMIT');
+        returnValue  = true;
+    } catch (e) {
+        await client.query('ROLLBACK');
+        console.log("ERROR atomic encript of EncriptUser() in UserTable: ",e); // 30
+        throw e;
+    } finally {
+        client.release();
+        return returnValue;
+    }
 }
 // ----------------------------------------------------------------------------
 async function AddUserOnDatabase(userData: pgInterfaceUser):Promise<string>{
     var returnValue: string = "-1";
+    const pool = new Pool({ connectionString: connectionStringWebUser });
+    
     try {
-        const pool = new Pool({ connectionString: connectionStringWebUser });
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-            var queryString: string = "INSERT INTO users (username,email) VALUES ($1,$2)";
-            client.query(queryString, [userData.user_name,userData.email]);
-            await client.query('COMMIT');
-            var queryString: string = "SELECT * FROM users WHERE username = $1";
-            const res = await pool.query(queryString,[userData.user_name])
-            var id = res.rows[0].id;
-            // TODO: Generate Acess Key
-            await EncriptUser(id);
-            
-            returnValue = id;
-
-        } catch (e) {
-            await client.query('ROLLBACK');
-            console.log(e);
-            throw e
-        } finally {
-            client.release();
-        }
+        var queryString: string = "INSERT INTO access_keys (user_name,email) VALUES ($1,$2) RETURNING *;";
+        // console.log("userData",userData)
+        const res = await pool.query(queryString, [userData.user_name,userData.email]);
         pool.end();
-        return returnValue;
-    } catch(e) {
+        await EncriptUser(res.rows[0] as pgInterfaceUser);
+        returnValue = res.rows[0].id;
+    } catch (e) {
         console.log("ERROR from AddUserOnDatabase() in UserTable: ",e); // 30
-        return returnValue;
-    }
-}
-// ----------------------------------------------------------------------------
-async function RemUserFromDataBaseById(userID: string):Promise<boolean>{
-    const pool = new Pool({ connectionString: connectionStringWebUser });
-    var resultBoolCheck = false;
-    // var userTablesArray:string[] = ["extra_email", "user_avatar", "user_data", "users"];
-    var queryString, avataFileName: string;
-    var result: any;
-    try {
-        result = await pool.query("SELECT * FROM user_avatar WHERE user_id = $1",[userID]);
-        if (result.rowCount > 0){
-            avataFileName = DencriptString(result.rows[0].fileName,result.rows[0].id);
-            if (fs.existsSync(avataFileName))
-                fs.unlinkSync(avataFileName);
-        }
-        result = await pool.query("DELETE FROM user_avatar WHERE user_id = $1",[userID]);
-        result = await pool.query("DELETE FROM extra_email WHERE user_id = $1",[userID]);
-        result = await pool.query("DELETE FROM user_data WHERE user_id = $1",[userID]);
-        result = await pool.query("UPDATE users SET active_record=FALSE WHERE id = $1",[userID]);
-        pool.end();
-        resultBoolCheck = true;
-    } catch(err) {
-        console.log("ERROR from RemUserFromDataBaseById() in UserTable: ", err); // .stack.split("at")[0]
+        throw e
     } finally {
-        return resultBoolCheck;
-    }
-}
-// ----------------------------------------------------------------------------
-async function VerifyUser(id: string):Promise<boolean>{
-    const pool = new Pool({ connectionString: connectionStringWebUser });
-    var returnValue:boolean = false;
-    var queryString: string = `SELECT * FROM users WHERE id = $1`;
-    var result;
-    try {
-        result = await pool.query(queryString, [id]);
-        if (result.rows[0].verify !== true){
-            queryString = `UPDATE users SET verify = true, completed = to_timestamp(${Date.now()} / 1000.0) WHERE id = $1 RETURNING verify`;
-            result = await pool.query(queryString, [id]);
-            returnValue = (result.rowCount === 1);
-        }
-        pool.end();
-        return returnValue;
-    } catch(e) {
-        console.log("ERROR from VerifyUser() in UserTable: ",e); // 30
-        return returnValue;
-    }
-}
-// ----------------------------------------------------------------------------
-async function UnverifyUser(id: string):Promise<boolean>{
-    const pool = new Pool({ connectionString: connectionStringWebUser });
-    var returnValue:boolean = false;
-    try {
-        var queryString: string = `UPDATE users SET verify = false WHERE id = $1 RETURNING verify`;
-        //console.log("queryString: ",queryString);
-        let result = await pool.query(queryString, [id]);
-        //console.log("VerifyUser: result (query) = ",result);
-        return (result.rowCount === 1);
-    } catch(e) {
-        console.log(e); // 30
-        return returnValue;
-    }
-}
-// ----------------------------------------------------------------------------
-async function CheckUserVerify(id: string):Promise<boolean>{
-    // DONE: função enxuta versão 0.0.0
-    const pool = new Pool({ connectionString: connectionStringWebUser });
-    try {
-        var queryString: string = "SELECT * FROM users WHERE id = $1"
-        let result = await pool.query(queryString, [id]);
-        pool.end();
-        return (result.rows[0].verify === true);
-    } catch(e) {
-        console.log("ERROR from CheckUserVerify() in UserTable: ",e);
-        console.log("Input function...");
-        console.log("id: ", id);
-        return false;
-    }    
-};
-// ----------------------------------------------------------------------------
-async function UpdatePasswordById(userId: string, userPW:string):Promise<boolean>{
-    var returnValue:boolean = false; 
-    try {
-        const pool = new Pool({ connectionString: connectionStringWebUser });
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-            var queryString: string = "UPDATE users SET userpw = $1 WHERE id = $2";
-            client.query(queryString, [userPW, userId]);
-            await client.query('COMMIT');
-        } catch (e) {
-            await client.query('ROLLBACK');
-            console.log(e);
-            throw e
-        } finally {
-            returnValue = true;
-            client.release();
-        }
-        pool.end();
-        return returnValue;
-    } catch(e) {
-        console.log("ERROR from UpdatePasswordById() in UserTable: ",e); // 30
+        
         return returnValue;
     }
 }
@@ -396,110 +310,14 @@ async function DeactivateUser(userId: string):Promise<boolean>{
     }
 }
 // ----------------------------------------------------------------------------
-async function ChangeUserEmail(user_id: string, email_id: string):Promise<boolean>{
-    var returnUserOK:boolean = false,
-        returnEmailOK:boolean = false; 
-    const pool = new Pool({ connectionString: connectionStringWebUser });
-    var result: any;
-    var queryString: string;
-    var extraEmail: pgInterfaceExtraEmail = {id: -1};
-    var user: pgInterfaceUser = {id: -1};
-    try {
-        queryString = "SELECT * FROM extra_email WHERE id = $1";
-        result = await pool.query(queryString, [email_id]);
-        extraEmail = result.rows[0];
-        queryString = "SELECT * FROM users WHERE id = $1";
-        result = await pool.query(queryString, [user_id]);
-        user = result.rows[0];
-        // console.log("user.verify,extraEmail.verify",user.verify,extraEmail.verify)
-        if ((user.verify) && (extraEmail.verify))
-        {
-            var newExtraEmail:string   = EncriptString(DencriptString(<string>user.email,user.id.toString()), extraEmail.id.toString());
-            var newMainEmail:string    = EncriptString(DencriptString(<string>extraEmail.email,extraEmail.id.toString()), user.id.toString());
-
-            var client = await pool.connect();
-            try {
-                await client.query('BEGIN');
-                queryString = "UPDATE users SET email = $2 WHERE id = $1";
-                client.query(queryString, [user_id,newMainEmail]);
-                await client.query('COMMIT');
-            } catch (e) {
-                await client.query('ROLLBACK');
-                console.log(e);
-                throw e
-            } finally {
-                returnUserOK = true;
-                client.release();
-            }
-            queryString = "UPDATE extra_email SET email = $2 WHERE id = $1";
-            result = await pool.query(queryString, [email_id,newExtraEmail]);
-            returnEmailOK = true;
-        }
-        pool.end();
-        return (returnEmailOK && returnUserOK);
-    } catch(e) {
-        console.log("ERROR from ChangeUserEmail() in UserTable: ", e); // 30
-        return (returnEmailOK && returnUserOK);
-    }
-}
-// ----------------------------------------------------------------------------
-async function getInstituionIdbyUserId(user_id: string):Promise<number>{
-    const pool = new Pool({ connectionString: connectionStringWebUser });
-    var returnValue: number = -1;
-    try {
-        let result = await pool.query("SELECT * FROM users WHERE id = $1", [user_id]);
-        if (result.rowCount > 0){
-            let dbVal = result.rows[0].institution_id
-            returnValue = (dbVal === undefined || dbVal === null)  ? -1 : result.rows[0].institution_id;
-        }
-        pool.end();
-    } catch(e) {
-        console.log("ERROR from getInstituionIdbyUserId() in UserTable: ", e); // 30
-    } finally{
-        return returnValue;
-    }
-}
-// ----------------------------------------------------------------------------
-async function getPrivilegeByUserId(user_id: string):Promise<string>{
-    const pool = new Pool({ connectionString: connectionStringWebUser });
-    var returnValue: string = "-1";//, privilege_id = "5";
-
-    try {
-        var result = await pool.query("SELECT * FROM users WHERE id = $1", [user_id]);
-        
-        if (result.rowCount > 0){
-            //console.log("getPrivilegeByUserId",result.rows[0])
-            // console.log("getPrivilegeByUserId",Number(result.rows[0].privilege_id))
-            returnValue = (result.rows[0].privilege_id === undefined) ? "5" : result.rows[0].privilege_id;
-        }
-        // if (privilege_id !== "-1"){
-        //     result = await pool.query("SELECT * FROM user_privilege WHERE id = $1", [privilege_id]);
-        //     returnValue = result.rows[0].privilege_value;
-        // }
-        pool.end();
-    } catch(e) {
-        console.log("ERROR from getPrivilegeByUserId() in UserTable: ", e); // 30
-    } finally{
-        return returnValue;
-    }
-}
-// ----------------------------------------------------------------------------
-export {CheckUserOnDataBase,
+export {CheckUserOnDataBaseByKey,
         CheckEmailOnDataBase,
         GetUserById,
         GetUserID,
         GetUserEmailById,
-        GetUserUserNameById,
-        CheckUserPW,
+        // GetUserUserNameById,
+        GetAccessKeyById,
         AddUserOnDatabase,
-        RemUserFromDataBaseById,
-        VerifyUser,
-        UnverifyUser,
-        CheckUserVerify,
-        CheckUserNeedPwUpdate,
-        CheckPasswordAreadyUpdated,
-        UpdatePasswordById,
         DeactivateUser,
-        ChangeUserEmail,
-        getInstituionIdbyUserId,
-        getPrivilegeByUserId};
+        printConvite,
+        ClearAccessKey};

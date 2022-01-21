@@ -1,5 +1,17 @@
 # Database
-/PSQL_database
+/*/*.sh
+
+#python process
+/transcript_files
+/audio_files
+
+# example
+/DEAJEC_25_08_2021
 
 #Files in folder
+*.txt
 logo.jpeg
+repo-mediaarea_1.0-19_all.deb
+Instrucoes_previas.txt
+favicon_io.zip
+

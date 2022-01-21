@@ -19,12 +19,15 @@ var privateKey = fs.readFileSync(path.resolve(__dirname, "./sslcert/server.key")
 var certificate = fs.readFileSync(path.resolve(__dirname, "./sslcert/server.crt"),'utf8');
 var credentials = {key: privateKey, cert: certificate};
 // ----------------------------------------------------------------------------
+// import multerConfig from "./Config/multer";
+// import multer from "multer";
 
 var app = express();
 // app.all('*', ensureSecure); // Redireciona HTTP -> HTTPS 
+// app.use(multer(multerConfig).single('file'));
 app.use(urlencoded({ extended: true, limit: '200mb' }));
 app.use(express.json({limit: '200mb'}));
-app.use(cors({ credentials: true, origin: true }));
+app.use(cors({ credentials: true, origin: true, exposedHeaders: 'filename' }));
 app.use(require("./routes"));
 app.set('trust proxy', true);
 

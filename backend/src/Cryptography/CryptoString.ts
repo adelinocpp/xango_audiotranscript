@@ -1,13 +1,9 @@
 require("dotenv").config();
 import crypto from "crypto";
+import { prefix } from "../Models/User";
 
 // ------------------------------------------------------------------------
-interface prefix {
-    key: string;
-    value: string;
-}
-// ------------------------------------------------------------------------
-function GenerateprefixFrontEnd(numKeys:number = 10):prefix[]{
+function generatePrefixFrontEnd(numKeys:number = 10):prefix[]{
     var setNumbers:number[] = [13, 41, 53, 83]
     var codeNumbers:number[] = [];
     var rejectNumber:boolean = false, genNumber:number;
@@ -40,7 +36,7 @@ function GenerateprefixFrontEnd(numKeys:number = 10):prefix[]{
             encripString = (codeNumbers[j] - Math.trunc(100*Math.random())).toString()
         tempPrefix = {
             key: codeNumbers[j].toString(),
-            value: EncriptString(<string>process.env.PW_PREFIX,encripString)
+            value: encriptString(<string>process.env.PW_PREFIX,encripString)
         }
         selPrefix = [...selPrefix,tempPrefix];
     }
@@ -51,18 +47,18 @@ function stringInvalid(testString:string|undefined): boolean{
     return ((testString === undefined) || (testString === null) || (testString === "NULL") || (testString === ""));
 }
 // ----------------------------------------------------------------------------
-function EncriptString(strInput: string|undefined, strId:string):string{
+function encriptString(strInput: string|undefined, strId:string|undefined):string{
     if (stringInvalid(strInput))
         return "";
-    var resizedIV = Buffer.allocUnsafe(16),
+    var resizedIV = Buffer.alloc(16, 0),
     iv = crypto
         .createHash("sha256")
-        .update(<string>process.env.CRIPT_IV)
+        .update(process.env.CRIPT_IV as string)
         .digest();
     iv.copy(resizedIV);
     var key = crypto
         .createHash("sha256")
-        .update(<string>(process.env.DB_CRIPTO_PREFIX+strId))
+        .update(process.env.DB_CRIPTO_PREFIX+ (strId as string))
         .digest();
     var cipher = crypto.createCipheriv("aes256", key, resizedIV);
     //console.log("strInput:",strInput);
@@ -71,19 +67,19 @@ function EncriptString(strInput: string|undefined, strId:string):string{
     return encrypted.toString();
 }
 // ----------------------------------------------------------------------------
-function DencriptString(strInput: string, strId:string):any{
-    if (stringInvalid(strInput))
+function dencriptString(strInput: string, strId:string):any{
+    if (stringInvalid(strInput) || strInput.length < 32)
         return undefined;
 
-    var resizedIV = Buffer.allocUnsafe(16),
+    var resizedIV = Buffer.alloc(16, 0),
     iv = crypto
         .createHash("sha256")
-        .update(<string>process.env.CRIPT_IV)
+        .update(process.env.CRIPT_IV as string)
         .digest();
     iv.copy(resizedIV);
     var key = crypto
         .createHash("sha256")
-        .update(<string>(process.env.DB_CRIPTO_PREFIX+strId))
+        .update(process.env.DB_CRIPTO_PREFIX+ (strId as string))
         .digest();
     var decipher = crypto.createDecipheriv("aes256", key, resizedIV);
     let decrypted = decipher.update(strInput, "hex", "binary");
@@ -92,7 +88,7 @@ function DencriptString(strInput: string, strId:string):any{
 }
 // ----------------------------------------------------------------------------
 export {
-    EncriptString,
-    DencriptString,
+    encriptString,
+    dencriptString,
     stringInvalid,
-    GenerateprefixFrontEnd};
+    generatePrefixFrontEnd};

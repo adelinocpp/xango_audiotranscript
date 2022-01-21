@@ -5,15 +5,11 @@ import child from "child_process";
 import util from "util";
 import path from "path";
 import { StoreLogAccess } from "../Database/LogAccessTable";
-// ----------------------------------------------------------------------------
-interface interfaceCaptcha {
-    img_file_name?: string
-    img_data?: string
-    
-};
+import { interfaceCaptcha } from "../Models/User";
+
 // ----------------------------------------------------------------------------
 class CaptchaControler {
-    async GetNewCaptcha(req: Request, res: Response) {
+    async getNewCaptcha(req: Request, res: Response) {
         var CaptchaGenPath: string;
         var strConsoleCommand: string;
         var id_client: string = req.params.id_client;
@@ -38,7 +34,7 @@ class CaptchaControler {
             var { stdout, stderr } = await exec_command(strConsoleCommand);
             generateSucess = true;
         }
-        catch (e) {
+        catch (e:any) {
             console.log("ERROR from GetNewCaptcha() in CaptchaController: ",e.stack.split("at")[0]); // 30
             generateSucess = false;
         }

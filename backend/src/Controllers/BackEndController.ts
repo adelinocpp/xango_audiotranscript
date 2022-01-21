@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { StoreLogAccess } from "../Database/LogAccessTable";
 import ResponseJSON from '../Models/ResponseJSON';
 import { CheckDataBase} from "../Database/General";
-import { GenerateprefixFrontEnd, stringInvalid } from "../Cryptography/CryptoString";
+import { encriptString, generatePrefixFrontEnd, stringInvalid } from "../Cryptography/CryptoString";
 
 
 // cd node_modules/geoip-lite && npm run-script updatedb license_key=njGqcrR42kahp8mb
@@ -32,7 +32,7 @@ class BackEndController {
       if (!stringInvalid(req.query.numkey as string))
         numKeys = parseInt(req.query.numkey as string)
       var response = new ResponseJSON();
-      let JSONmessage = GenerateprefixFrontEnd(numKeys);
+      let JSONmessage = generatePrefixFrontEnd(numKeys);
       response.requestData = JSON.parse(JSON.stringify(JSONmessage));
       response.databaseIsUp();
       response.requestSucess = true;
@@ -48,5 +48,19 @@ class BackEndController {
       await StoreLogAccess("-1",req,true);
       return res.status(200).json(response);
     }
+    // ------------------------------------------------------------------------
+    async encriptSequence(req: Request, res: Response){
+      var response = new ResponseJSON();
+      await response.processAccessToken(req.body.accessToken);
+      response.databaseIsUp();
+      response.requestSucess = true;
+      let JSONmessage = { encript: encriptString(req.query.A as string,req.query.B as string),
+                          string_A: req.query.A as string,
+                          string_B: req.query.B as string};
+      response.requestData = JSON.parse(JSON.stringify(JSONmessage));
+      await StoreLogAccess("-1",req,true);
+      return res.status(200).json(response);
+    }
+    // ------------------------------------------------------------------------
 }
 export default new BackEndController();
