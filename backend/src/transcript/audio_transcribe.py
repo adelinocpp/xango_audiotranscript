@@ -120,30 +120,4 @@ fOutputTranscript.close()
 fRunReport.close()
 sys.exit("MODO DE DEPURAÇÃO: Fim do script")
 # -----------------------------------------------------------------------------
-    # if not (codec == "PCM"):
-    #     tempFileName = 'temp.wav'
-    #     convertFilecmd = 'ffmpeg -i ' + FileToOpen + ' temp.wav -y -loglevel error -hide_banner'
-    #     subprocess.Popen(convertFilecmd, shell=True, stdout=subprocess.PIPE).wait()
-    #     removeFilecmd = 'rm temp.wav'
-    #     removeFile = True
-    #     FileToOpen = './' + tempFileName
-    # else:
-    #     FileToOpen = AUDIO_FILE.as_posix()
-        
-    # with sr.AudioFile(FileToOpen) as source:
-    #     audio = r.record(source)  # read the entire audio file
-    #     try:
-    #         RESULT = r.recognize_google(audio, language='pt-BR', show_all=True)
-    #         print("Arquivo:", AUDIO_FILE.as_posix());
-    #         print("Google Speech Recognition thinks you said: ")
-    #         print(RESULT)
-    #         print("")
-    #     except sr.UnknownValueError:
-    #         print("Google Speech Recognition could not understand audio")
-    #         print("")
-    #     except sr.RequestError as e:
-    #         print("Could not request results from Google Speech Recognition service; {0}".format(e))
-    #         print("")
-    #     if (removeFile):
-    #         subprocess.Popen(removeFilecmd, shell=True, stdout=subprocess.PIPE).wait()
 
